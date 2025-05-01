@@ -1,5 +1,3 @@
-// src/pathfinder.rs
-
 use std::collections::{HashMap, HashSet, VecDeque};
 use crate::types::{Address, Pool, SwapHop, SwapPath};
 use crate::storage::PoolStorage;
@@ -153,6 +151,27 @@ fn find_direct_pools<'a>(
         .collect()
 }
 
+// Function to find the best path based on amount out
+pub fn find_best_path(
+    graph: &TokenGraph,
+    storage: &PoolStorage,
+    token_in: &Address,
+    token_out: &Address,
+    amount_in: &str,
+    max_hops: usize,
+) -> Option<SwapPath> {
+    let paths = find_paths(storage, token_in, token_out, max_hops);
+    
+    if paths.is_empty() {
+        return None;
+    }
+    
+    // For now, just return the first path
+    // In a real implementation, we would calculate the amount out for each path
+    // and return the one with the highest amount out
+    Some(paths[0].clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,7 +208,7 @@ mod tests {
             id: "0xPoolWethDai".to_string(),
             token0: weth_addr.clone(),
             token1: dai_addr.clone(),
-            reserve0: 1_500 * 10u128.pow(18),     // 1.5k WETH
+            reserve0: 1_500 * 10u128.pow(18),    // 1.5k WETH
             reserve1: 4_500_000 * 10u128.pow(18), // 4.5M DAI
             fee: 30,
         };

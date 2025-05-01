@@ -17,4 +17,8 @@ thiserror = "1.0"
 log = "0.4"
 # Optional: Ethereum types (if not defining our own)
 # ethers = { version = "2.0", features = ["abigen"] }
-tycho-indexer = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-indexer" } # Tycho Indexer integration
+tycho-client = "0.66.2" # Or the version matching your codebase file
+tycho-common = "0.66.2" # Or the version matching your codebase file
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hex = "0.4.3"

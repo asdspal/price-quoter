@@ -22,3 +22,8 @@ tycho-common = "0.66.2" # Or the version matching your codebase file
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4.3"
+
+
+[[example]]
+name = "weth_usdc_quote"
+path = "examples/weth_usdc_quote.rs"

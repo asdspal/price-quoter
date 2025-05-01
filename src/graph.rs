@@ -82,19 +82,23 @@ impl TokenGraph {
         // Remove edges from token0 to token1
         if let Some(edges) = self.adjacency_list.get_mut(&pool.token0) {
             edges.retain(|edge| edge.pool_id != pool.id);
+            
             if edges.is_empty() {
                 self.adjacency_list.remove(&pool.token0);
                 self.tokens.remove(&pool.token0);
             }
+            
         }
         
         // Remove edges from token1 to token0
         if let Some(edges) = self.adjacency_list.get_mut(&pool.token1) {
             edges.retain(|edge| edge.pool_id != pool.id);
+            
             if edges.is_empty() {
                 self.adjacency_list.remove(&pool.token1);
                 self.tokens.remove(&pool.token1);
             }
+            
         }
     }
 
@@ -223,28 +227,28 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_pool() {
-        let (_, pools) = create_test_data();
-        let mut graph = TokenGraph::new();
-        
-        // Add pools to graph
-        for pool in &pools {
-            graph.add_pool(pool);
-        }
-        
-        // Remove the first pool
-        graph.remove_pool(&pools[0]);
-        
-        // Check token count (should still be 3 as all tokens are still in the graph)
-        assert_eq!(graph.token_count(), 3);
-        
-        // Check edge count (1 pool * 2 directions = 2 edges)
-        assert_eq!(graph.edge_count(), 2);
-        
-        // Check that WETH only has an edge to DAI now
-        let weth_addr = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
-        let weth_edges = graph.get_edges(&weth_addr);
-        assert_eq!(weth_edges.len(), 1);
-        assert_eq!(weth_edges[0].to, "0x6B175474E89094C44Da98b954EedeAC495271d0F");
-    }
+	fn test_remove_pool() {
+		let (_, pools) = create_test_data();
+		let mut graph = TokenGraph::new();
+		
+		// Add pools to graph
+		for pool in &pools {
+		    graph.add_pool(pool);
+		}
+		
+		// Remove the first pool
+		graph.remove_pool(&pools[0]);
+		
+		// Check token count (USDC should be removed, WETH and DAI remain)
+		assert_eq!(graph.token_count(), 2);
+		
+		// Check edge count (1 pool * 2 directions = 2 edges)
+		assert_eq!(graph.edge_count(), 2);
+		
+		// Check that WETH only has an edge to DAI now
+		let weth_addr = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
+		let weth_edges = graph.get_edges(&weth_addr);
+		assert_eq!(weth_edges.len(), 1);
+		assert_eq!(weth_edges[0].to, "0x6B175474E89094C44Da98b954EedeAC495271d0F");
+	}
 }

@@ -60,7 +60,7 @@ impl TychoConnector {
             component_ids: None,
             tvl_gt: None,
             chain: Chain::Ethereum,
-            pagination: PaginationParams { page: 0, page_size: 1000 },
+            pagination: PaginationParams { page: 0, page_size: 500 },
         };
         
         let states_request = ProtocolStateRequestBody {
@@ -69,7 +69,7 @@ impl TychoConnector {
             chain: Chain::Ethereum,
             include_balances: true,
             version: Default::default(),
-            pagination: PaginationParams { page: 0, page_size: 1000 },
+            pagination: PaginationParams { page: 0, page_size: 500 },
         };
         
         let components = self.client.get_protocol_components(&components_request).await?;

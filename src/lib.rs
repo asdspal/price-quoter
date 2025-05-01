@@ -15,6 +15,7 @@ pub use types::{SwapPath, Pool, Token, U256, Address};
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use crate::pathfinder::find_paths;
 
     fn create_test_data() -> (HashMap<Address, Token>, Vec<Pool>) {
         let usdc_addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string();
@@ -54,7 +55,7 @@ mod tests {
     #[test]
     fn test_price_quoter_initialization() {
         let (tokens, pools) = create_test_data();
-        let quoter = PriceQuoter::with_storage(PoolStorage::with_initial_data(pools, tokens));
+        let quoter = PriceQuoter::new(PoolStorage::with_initial_data(pools, tokens));
         
         assert_eq!(quoter.get_storage().token_count(), 3);
         assert_eq!(quoter.get_storage().pool_count(), 2);
@@ -63,12 +64,13 @@ mod tests {
     #[test]
     fn test_find_paths() {
         let (tokens, pools) = create_test_data();
-        let quoter = PriceQuoter::with_storage(PoolStorage::with_initial_data(pools, tokens));
+        let storage = PoolStorage::with_initial_data(pools, tokens);
         
-        let usdc_addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-        let dai_addr = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+        let usdc_addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string();
+        let dai_addr = "0x6B175474E89094C44Da98b954EedeAC495271d0F".to_string();
         
-        let paths = quoter.find_paths(usdc_addr, dai_addr);
+        // Use the find_paths function directly from the pathfinder module
+        let paths = find_paths(&storage, &usdc_addr, &dai_addr, 2);
         
         // Should find 1 path: USDC -> WETH -> DAI
         assert_eq!(paths.len(), 1);
@@ -78,25 +80,27 @@ mod tests {
     #[test]
     fn test_find_quote() {
         let (tokens, pools) = create_test_data();
-        let quoter = PriceQuoter::with_storage(PoolStorage::with_initial_data(pools, tokens));
+        let quoter = PriceQuoter::new(PoolStorage::with_initial_data(pools, tokens));
         
-        let usdc_addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-        let dai_addr = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+        let usdc_addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string();
+        let dai_addr = "0x6B175474E89094C44Da98b954EedeAC495271d0F".to_string();
         
         // Swap 1000 USDC for DAI
-        let amount_in = 1000 * 10u128.pow(6); // 1000 USDC
+        let amount_in = "1000000000"; // 1000 USDC with 6 decimals
+        let max_hops = 2;
         
-        let result = quoter.get_quote(usdc_addr, dai_addr, amount_in);
+        let result = quoter.get_quote(&usdc_addr, &dai_addr, amount_in, max_hops);
         
         assert!(result.is_ok());
-        let (path, amount_out) = result.unwrap();
+        let quote = result.unwrap();
         
         // Should be a 2-hop path: USDC -> WETH -> DAI
-        assert_eq!(path.hops.len(), 2);
-        assert_eq!(path.token_in, usdc_addr);
-        assert_eq!(path.token_out, dai_addr);
+        assert_eq!(quote.path.len(), 2);
+        assert_eq!(quote.token_in, usdc_addr);
+        assert_eq!(quote.token_out, dai_addr);
         
         // Output amount should be positive
-        assert!(amount_out > 0);
+        let amount_out_value = quote.amount_out.parse::<u128>().unwrap();
+        assert!(amount_out_value > 0);
     }
 }

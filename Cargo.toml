@@ -1,0 +1,20 @@
+[package]
+name = "tycho_price_quoter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# HTTP client for Indexer API calls
+reqwest = { version = "0.11", features = ["json"] }
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+# Serialization/deserialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# Error handling
+thiserror = "1.0"
+# Logging
+log = "0.4"
+# Optional: Ethereum types (if not defining our own)
+# ethers = { version = "2.0", features = ["abigen"] }
+tycho-indexer = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-indexer" } # Tycho Indexer integration

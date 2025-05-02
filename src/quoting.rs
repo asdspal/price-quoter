@@ -89,12 +89,50 @@ impl PriceQuoter {
         
         Ok(quote)
     }
-    
-    fn calculate_amount_out(&self, path: &SwapPath, amount_in: &str) -> Result<String, QuoterError> {
-        // Simplified calculation - in a real implementation, this would use the actual pool math
-        // For now, just return a dummy value
-        Ok("1000000000000000000".to_string())
-    }
+
+	fn calculate_amount_out(&self, path: &SwapPath, amount_in: &str) -> Result<String, QuoterError> {
+		let mut current_amount = amount_in.parse::<u128>().unwrap_or(0);
+		
+		for hop in &path.hops {
+		    let pool = self.storage.get_pool(&hop.pool_id)
+		        .ok_or_else(|| QuoterError::StorageError(
+		            crate::storage::StorageError::PoolNotFound(hop.pool_id.clone())
+		        ))?;
+		    
+		    let token_in = self.storage.get_token(&hop.token_in)
+		        .ok_or_else(|| QuoterError::TokenNotFound(hop.token_in.clone()))?;
+		    
+		    let token_out = self.storage.get_token(&hop.token_out)
+		        .ok_or_else(|| QuoterError::TokenNotFound(hop.token_out.clone()))?;
+		    
+		    // Determine which token is token0 and which is token1
+		    let (reserve_in, reserve_out) = if pool.token0 == hop.token_in {
+		        (pool.reserve0, pool.reserve1)
+		    } else {
+		        (pool.reserve1, pool.reserve0)
+		    };
+		    
+		    // Calculate amount out using the constant product formula: x * y = k
+		    // amount_out = (reserve_out * amount_in) / (reserve_in + amount_in)
+		    // Apply the fee: amount_in = amount_in * (10000 - fee) / 10000
+		    
+		    // Apply fee (fee is in basis points, e.g. 30 = 0.3%)
+		    let fee_numerator = 10000 - pool.fee as u128;
+		    let amount_in_with_fee = current_amount * fee_numerator / 10000;
+		    
+		    // Calculate amount out
+		    if reserve_in == 0 || reserve_out == 0 {
+		        return Err(QuoterError::NoPathFound);
+		    }
+		    
+		    let numerator = reserve_out * amount_in_with_fee;
+		    let denominator = reserve_in + amount_in_with_fee;
+		    
+		    current_amount = numerator / denominator;
+		}
+		
+		Ok(current_amount.to_string())
+	}
     
     pub fn get_storage(&self) -> &PoolStorage {
         &self.storage

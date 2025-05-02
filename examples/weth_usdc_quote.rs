@@ -18,14 +18,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let quoter = PriceQuoter::from_tycho(&tycho_url, api_key).await?;
     
     // Define token addresses for WETH and USDC
-    let weth_addr = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-    let usdc_addr = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+	let weth_addr = "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+	let usdc_addr = "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    
+    // Print all tokens in storage
+    println!("Total tokens in storage: {}", quoter.get_storage().token_count());
+    
+    
     
     // Get token information
-    let weth = quoter.get_storage().get_token(weth_addr)
-        .expect("WETH token not found");
     let usdc = quoter.get_storage().get_token(usdc_addr)
         .expect("USDC token not found");
+    let weth = quoter.get_storage().get_token(weth_addr)
+        .expect("WETH token not found");
+
     
     println!("📊 Token Information:");
     println!("  WETH: {} ({} decimals)", weth.symbol, weth.decimals);

@@ -31,17 +31,13 @@ impl PoolStorage {
         }
     }
     
-    pub fn with_initial_data(
-        pools: Vec<Pool>, 
-        tokens: HashMap<String, Token>
-    ) -> Self {
+    pub fn with_initial_data(pools: Vec<Pool>, tokens: HashMap<String, Token>) -> Self {
         let mut storage = Self {
-            tokens,
             pools: HashMap::new(),
+            tokens,
             token_to_pools: HashMap::new(),
         };
         
-        // Add all pools
         for pool in pools {
             storage.add_pool(pool);
         }
@@ -49,31 +45,20 @@ impl PoolStorage {
         storage
     }
     
-    pub async fn load_from_tycho(
-        url: &str, 
-        api_key: Option<String>
-    ) -> Result<Self, StorageError> {
-        let connector = TychoConnector::new(url, api_key).await?;
-        
-        // Fetch tokens and pools
-        let tokens = connector.fetch_tokens().await?;
-        let pools = connector.fetch_pools().await?;
-        
-        // Create a new storage instance
-        let mut storage = Self::new();
-        
-        // Add tokens
-        for token in tokens {
-            storage.add_token(token);
-        }
-        
-        // Add pools
-        for pool in pools {
-            storage.add_pool(pool);
-        }
-        
-        Ok(storage)
-    }
+	pub async fn load_from_tycho(
+		url: &str, 
+		api_key: Option<String>
+	) -> Result<Self, StorageError> {
+		let connector = TychoConnector::new(url, api_key).await?;
+		
+		// Fetch pools and tokens
+		let (pools, tokens) = connector.fetch_pools().await?;
+		
+		// Create a new storage instance with the fetched data
+		let mut storage = Self::with_initial_data(pools, tokens);
+		
+		Ok(storage)
+	}
     
     pub fn add_token(&mut self, token: Token) {
         self.tokens.insert(token.address.clone(), token);

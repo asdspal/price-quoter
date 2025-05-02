@@ -54,53 +54,184 @@ impl TychoConnector {
         Ok(result)
     }
     
-    pub async fn fetch_pools(&self) -> Result<Vec<Pool>, TychoError> {
-        let components_request = ProtocolComponentsRequestBody {
-            protocol_system: "uniswap_v2".to_string(),
-            component_ids: None,
-            tvl_gt: None,
-            chain: Chain::Ethereum,
-            pagination: PaginationParams { page: 0, page_size: 500 },
-        };
-        
-        let states_request = ProtocolStateRequestBody {
-            protocol_ids: None,
-            protocol_system: "uniswap_v2".to_string(),
-            chain: Chain::Ethereum,
-            include_balances: true,
-            version: Default::default(),
-            pagination: PaginationParams { page: 0, page_size: 500 },
-        };
-        
-        let components = self.client.get_protocol_components(&components_request).await?;
-        let states = self.client.get_protocol_states(&states_request).await?;
-        
-        // Create a map of component_id to state
-        let state_map: HashMap<String, Arc<serde_json::Value>> = states
-            .states
-            .into_iter()
-            .map(|s| {
-                let state_value = serde_json::to_value(&s.attributes)
-                    .unwrap_or_else(|_| serde_json::Value::Null);
-                (s.component_id.clone(), Arc::new(state_value))
-            })
-            .collect();
-        
-        let mut pools = Vec::new();
-        
-        for component in components.protocol_components {
-            if let Some(state) = state_map.get(&component.id) {
-                // Convert component and state to Pool
-                match self.component_to_pool(&component, state) {
-                    Ok(pool) => pools.push(pool),
-                    Err(e) => eprintln!("Failed to convert component to pool: {:?}", e),
-                }
-            }
-        }
-        
-        Ok(pools)
-    }
-    
+	pub async fn fetch_pools(&self) -> Result<(Vec<Pool>, HashMap<String, Token>), TychoError> {
+		// First fetch tokens
+		println!("Fetching tokens...");
+		let tokens = match self.client.get_all_tokens(
+		    Chain::Ethereum,
+		    Some(51),  // min token quality
+		    Some(30),  // days since last traded
+		    1000,      // chunk size
+		).await {
+		    Ok(tokens) => tokens,
+		    Err(e) => {
+		        eprintln!("Error fetching tokens: {:?}", e);
+		        return Err(TychoError::RpcError(e));
+		    }
+		};
+		
+		// Convert to our Token type and store in a HashMap
+		let mut token_map = HashMap::new();
+		for token in tokens {
+		    let address = hex::encode(&token.address);
+		    let our_token = Token {
+		        address: address.clone(),
+		        symbol: token.symbol.clone(),
+		        decimals: token.decimals as u8,
+		    };
+		    token_map.insert(address, our_token);
+		}
+		
+		println!("Fetched {} tokens", token_map.len());
+		
+		// Then get components
+		println!("Fetching components...");
+		let components_request = ProtocolComponentsRequestBody {
+		    protocol_system: "uniswap_v2".to_string(),
+		    component_ids: None,
+		    tvl_gt: None,
+		    chain: Chain::Ethereum,
+		    pagination: PaginationParams { page: 0, page_size: 500 },
+		};
+		
+		let components = match self.client.get_protocol_components(&components_request).await {
+		    Ok(c) => c,
+		    Err(e) => {
+		        eprintln!("Error fetching components: {:?}", e);
+		        return Err(TychoError::RpcError(e));
+		    }
+		};
+		
+		println!("Fetched {} components", components.protocol_components.len());
+		
+		// Extract component IDs
+		let component_ids: Vec<String> = components.protocol_components
+		    .iter()
+		    .map(|c| c.id.clone())
+		    .collect();
+		
+		if component_ids.is_empty() {
+		    return Ok((vec![], token_map));
+		}
+		
+		// Get states using component_ids
+		println!("Fetching states...");
+		let states_request = ProtocolStateRequestBody {
+		    protocol_ids: Some(component_ids),
+		    protocol_system: "uniswap_v2".to_string(),
+		    chain: Chain::Ethereum,
+		    include_balances: true,
+		    version: Default::default(),
+		    pagination: PaginationParams { page: 0, page_size: 100 },
+		};
+		
+		let states = match self.client.get_protocol_states(&states_request).await {
+		    Ok(s) => s,
+		    Err(e) => {
+		        eprintln!("Error fetching states: {:?}", e);
+		        return Err(TychoError::RpcError(e));
+		    }
+		};
+		
+		println!("Fetched {} states", states.states.len());
+		
+		// Process components and states to create Pool objects
+		let mut pools = Vec::new();
+		
+		for component in components.protocol_components {
+		    // Find the corresponding state
+		    if let Some(state) = states.states.iter().find(|s| s.component_id == component.id) {
+		        // Extract token addresses
+		        if component.tokens.len() != 2 {
+		            continue; // Skip pools that don't have exactly 2 tokens
+		        }
+		        
+		        let token0 = hex::encode(&component.tokens[0]);
+		        let token1 = hex::encode(&component.tokens[1]);
+		        
+		        // Make sure we have these tokens in our map
+		        // If not, create placeholder tokens
+		        if !token_map.contains_key(&token0) {
+		            let placeholder = Token {
+		                address: token0.clone(),
+		                symbol: format!("Token-{}", &token0[0..8]),
+		                decimals: 18, // Default to 18 decimals
+		            };
+		            token_map.insert(token0.clone(), placeholder);
+		        }
+		        
+		        if !token_map.contains_key(&token1) {
+		            let placeholder = Token {
+		                address: token1.clone(),
+		                symbol: format!("Token-{}", &token1[0..8]),
+		                decimals: 18, // Default to 18 decimals
+		            };
+		            token_map.insert(token1.clone(), placeholder);
+		        }
+		        
+		        // Extract reserves from state
+		        let reserve0 = match state.attributes.get("reserve0") {
+		            Some(bytes) => {
+		                let bytes = bytes.as_ref();
+		                if bytes.len() <= 32 {
+		                    let mut buf = [0u8; 32];
+		                    let start = 32 - bytes.len();
+		                    buf[start..].copy_from_slice(bytes);
+		                    u128::from_be_bytes(buf[16..32].try_into().unwrap_or_default())
+		                } else {
+		                    0
+		                }
+		            },
+		            None => 0,
+		        };
+		        
+		        let reserve1 = match state.attributes.get("reserve1") {
+		            Some(bytes) => {
+		                let bytes = bytes.as_ref();
+		                if bytes.len() <= 32 {
+		                    let mut buf = [0u8; 32];
+		                    let start = 32 - bytes.len();
+		                    buf[start..].copy_from_slice(bytes);
+		                    u128::from_be_bytes(buf[16..32].try_into().unwrap_or_default())
+		                } else {
+		                    0
+		                }
+		            },
+		            None => 0,
+		        };
+		        
+		        // Extract fee from component static attributes
+		        let fee = match component.static_attributes.get("fee") {
+		            Some(bytes) => {
+		                let bytes = bytes.as_ref();
+		                if !bytes.is_empty() {
+		                    bytes[0] as u32  // Convert to u32
+		                } else {
+		                    30u32 // Default to 0.3%
+		                }
+		            },
+		            None => 30u32, // Default to 0.3%
+		        };
+		        
+		        // Create Pool object
+		        let pool = Pool {
+		            id: component.id.clone(),
+		            token0: token0,
+		            token1: token1,
+		            reserve0,
+		            reserve1,
+		            fee,
+		        };
+		        
+		        pools.push(pool);
+		    }
+		}
+		
+		println!("Created {} pools", pools.len());
+		
+		Ok((pools, token_map))
+	}
+	    
     fn component_to_pool(
         &self, 
         component: &tycho_common::dto::ProtocolComponent,
